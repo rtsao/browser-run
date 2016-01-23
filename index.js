@@ -4,6 +4,7 @@ var through = require('through');
 var duplex = require('duplexer');
 var fs = require('fs');
 var xws = require('xhr-write-stream')();
+var shoe = require('shoe');
 var enstore = require('enstore');
 var launch = require('./lib/launch');
 var ecstatic = require('ecstatic');
@@ -31,6 +32,16 @@ function runner (opts) {
   input.pipe(bundle.createWriteStream());
   var output = through();
   var dpl = duplex(input, output);
+
+  var browserSocketOutput = through();
+  var browserSocketInput = through();
+
+  var sock = shoe(function (stream) {
+    stream.pipe(browserSocketOutput);
+    browserSocketInput.pipe(stream);
+  });
+
+  var browserSocketStream = duplex(browserSocketInput, browserSocketOutput);
 
   var server = http.createServer(function (req, res) {
 
@@ -71,6 +82,9 @@ function runner (opts) {
 
     res.end('not supported');
   });
+
+  sock.install(server, '/socket-stream');
+
   destroyable(server);
 
   var browser;
@@ -100,6 +114,8 @@ function runner (opts) {
       });
     });
   }
+
+  dpl.browserSocketStream = browserSocketStream;
 
   dpl.stop = function () {
     try { server.destroy(); } catch (e) {}
